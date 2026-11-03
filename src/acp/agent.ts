@@ -27,7 +27,14 @@ import { getAuthMethods } from './auth.js'
 import { SessionManager, type PiAcpSession } from './session.js'
 import { SessionStore } from './session-store.js'
 import { PiRpcProcess } from '../pi-rpc/process.js'
-import { listPiSessions, findPiSession, readPiSessionTitle } from './pi-sessions.js'
+import {
+  applySessionFilter,
+  findPiSession,
+  hydratePiSessionTitles,
+  listPiSessionIndex,
+  readPiSessionTitle,
+  sessionFilterFromEnv
+} from './pi-sessions.js'
 import { normalizePiAssistantText, normalizePiMessageText } from './translate/pi-messages.js'
 import { toolResultToText } from './translate/pi-tools.js'
 import {
@@ -904,7 +911,8 @@ export class PiAcpAgent implements ACPAgent {
     // ACP: filter by cwd if provided.
     // Zed currently sends `{}` (no cwd), so we default to the last session cwd to
     // emulate pi's `/resume` picker (project-scoped).
-    const all = listPiSessions()
+    // Cheap index (first line + mtime, cached); titles are hydrated per page below.
+    const all = applySessionFilter(listPiSessionIndex(), sessionFilterFromEnv())
 
     const effectiveCwd = (params as any).cwd ?? this.lastSessionCwd
     const filtered = effectiveCwd ? all.filter(s => s.cwd === effectiveCwd) : all
@@ -917,7 +925,7 @@ export class PiAcpAgent implements ACPAgent {
     const PAGE_SIZE = 50
     const page = filtered.slice(start, start + PAGE_SIZE)
 
-    const sessions: SessionInfo[] = page.map(s => ({
+    const sessions: SessionInfo[] = hydratePiSessionTitles(page).map(s => ({
       sessionId: s.sessionId,
       cwd: s.cwd,
       title: s.title,
